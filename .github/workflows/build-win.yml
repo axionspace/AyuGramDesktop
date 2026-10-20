@@ -129,7 +129,7 @@ jobs:
       - name: Telegram Desktop build.
         run: |
           cd %TBUILD%\%REPO_NAME%
-          cmake --build out --config %BUILD_CONFIG% --parallel
+          cmake --build out --config %BUILD_CONFIG% --parallel -- -k 0
 
       - name: Move artifact.
         if: env.UPLOAD_ARTIFACT == 'true'
