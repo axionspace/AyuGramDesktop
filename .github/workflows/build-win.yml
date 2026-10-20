@@ -33,6 +33,27 @@ jobs:
         shell: cmd
 
     steps:
+      - name: Free up disk space.
+        shell: pwsh
+        run: |
+          $targets = @(
+            'C:\Program Files\Android',
+            'C:\Program Files (x86)\Android',
+            'C:\Program Files\dotnet',
+            'C:\Program Files\Google',
+            'C:\Program Files\MongoDB',
+            'C:\Program Files\MySQL',
+            'C:\Program Files\R',
+            'C:\Program Files\Java',
+            'C:\Program Files\Microsoft\Edge',
+            'C:\Program Files (x86)\Microsoft\Edge'
+          )
+          foreach ($t in $targets) {
+            if (Test-Path $t) {
+              try { Remove-Item -Recurse -Force $t -ErrorAction Stop } catch { }
+            }
+          }
+          Get-PSDrive C | ForEach-Object { "C: free = $([math]::Round($_.Free/1GB,1)) GB" }
       - name: Prepare directories.
         run: |
           mkdir %userprofile%\TBuild\Libraries
@@ -119,6 +140,27 @@ jobs:
         shell: cmd
 
     steps:
+      - name: Free up disk space.
+        shell: pwsh
+        run: |
+          $targets = @(
+            'C:\Program Files\Android',
+            'C:\Program Files (x86)\Android',
+            'C:\Program Files\dotnet',
+            'C:\Program Files\Google',
+            'C:\Program Files\MongoDB',
+            'C:\Program Files\MySQL',
+            'C:\Program Files\R',
+            'C:\Program Files\Java',
+            'C:\Program Files\Microsoft\Edge',
+            'C:\Program Files (x86)\Microsoft\Edge'
+          )
+          foreach ($t in $targets) {
+            if (Test-Path $t) {
+              try { Remove-Item -Recurse -Force $t -ErrorAction Stop } catch { }
+            }
+          }
+          Get-PSDrive C | ForEach-Object { "C: free = $([math]::Round($_.Free/1GB,1)) GB" }
       - name: Prepare directories.
         run: |
           mkdir %userprofile%\TBuild\Libraries
