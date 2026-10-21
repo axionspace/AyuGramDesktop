@@ -6,9 +6,9 @@ on:
       config:
         description: 'CMake configuration'
         required: false
-        default: 'Debug'
+        default: 'Release'
         type: choice
-        options: ['Debug', 'Release']
+        options: ['Release', 'Debug']
   push:
     tags:
       - 'v*'
@@ -19,152 +19,13 @@ permissions:
 env:
   UPLOAD_ARTIFACT: "true"
   PREPARE_PATH: "Telegram/build/prepare/prepare.py"
-  BUILD_CONFIG: ${{ inputs.config || 'Debug' }}
+  BUILD_CONFIG: ${{ inputs.config || 'Release' }}
 
 jobs:
-  # Kept separate so a failing build never throws away an hour of libraries.
-  libraries:
-    name: Libraries
-    runs-on: windows-latest
-    timeout-minutes: 200
-
-    defaults:
-      run:
-        shell: cmd
-
-    steps:
-      - name: Free up disk space.
-        shell: pwsh
-        run: |
-          $targets = @(
-            'C:\Program Files\Android',
-            'C:\Program Files (x86)\Android',
-            'C:\Program Files\dotnet',
-            'C:\Program Files\Google',
-            'C:\Program Files\MongoDB',
-            'C:\Program Files\MySQL',
-            'C:\Program Files\R',
-            'C:\Program Files\Java',
-            'C:\Program Files\Microsoft\Edge',
-            'C:\Program Files (x86)\Microsoft\Edge'
-          )
-          foreach ($t in $targets) {
-            if (Test-Path $t) {
-              try { Remove-Item -Recurse -Force $t -ErrorAction Stop } catch { }
-            }
-          }
-          Get-PSDrive C | ForEach-Object { "C: free = $([math]::Round($_.Free/1GB,1)) GB" }
-      - name: Prepare directories.
-        run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
-          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
-          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
-
-      - name: Get repository name.
-        shell: bash
-        run: echo "REPO_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
-
-      - name: Clone.
-        uses: actions/checkout@v7
-        with:
-          submodules: recursive
-          path: ${{ env.TBUILD }}\${{ env.REPO_NAME }}
-
-      - name: First set up.
-        shell: bash
-        run: |
-          DOCPATH=$TBUILD/$REPO_NAME/docs/building-win.md
-          SDK="$(grep "SDK version" $DOCPATH | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
-          echo "SDK=$SDK" >> $GITHUB_ENV
-          echo "$(sha256sum $TBUILD/$REPO_NAME/$PREPARE_PATH | awk '{ print $1 }')" >> CACHE_KEY.txt
-          echo "$SDK" >> CACHE_KEY.txt
-          if [ "$BUILD_CONFIG" = "Release" ]; then echo "release" >> CACHE_KEY.txt; fi
-          echo "CACHE_KEY=$(sha256sum CACHE_KEY.txt | awk '{ print $1 }')" >> $GITHUB_ENV
-
-      - uses: Eden-CI/msvc-dev-cmd@master
-        name: Native Tools Command Prompt.
-        with:
-          arch: x64
-          sdk: ${{ env.SDK }}
-          toolset: 14.44
-
-      - name: NuGet sources.
-        run: |
-          nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
-          nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
-
-      - name: ThirdParty cache.
-        id: cache-third-party
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-${{ runner.arch }}-third-party-
-
-      - name: Libraries cache.
-        id: cache-libs
-        uses: actions/cache@v6
-        with:
-          path: |
-            ${{ env.LibrariesPath }}\*
-            !${{ env.LibrariesPath }}\cache_keys
-            !${{ env.LibrariesPath }}\[qQ]t[_-]*
-            ${{ env.LibrariesPath }}\cache_keys\*
-            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-libs-v2-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-x64-libs-v2-
-
-      - name: Qt cache.
-        id: cache-qt
-        uses: actions/cache@v6
-        with:
-          path: |
-            ${{ env.LibrariesPath }}\[qQ]t[_-]*
-            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-qt6-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-x64-qt6-
-
-      - name: Install ATL.
-        shell: pwsh
-        run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = & $vswhere -latest -products * -property installationPath
-          $msvc = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
-          $atlSrc = if ($msvc) { Join-Path $msvc.FullName "atlmfc" } else { $null }
-          if (-not $atlSrc -or -not (Test-Path (Join-Path $atlSrc "include\atlbase.h"))) {
-            $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-            $argLine = "modify --installPath `"$vsPath`" --add Microsoft.VisualStudio.Component.VC.ATL --quiet --norestart --nocache"
-            $p = Start-Process -FilePath $installer -ArgumentList $argLine -Wait -PassThru
-            Write-Output "installer exit $($p.ExitCode)"
-            $msvc = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory | Sort-Object Name -Descending | Select-Object -First 1
-            $atlSrc = Join-Path $msvc.FullName "atlmfc"
-          }
-          $atlLegacy = Join-Path $vsPath "VC\atlmfc"
-          if (-not (Test-Path (Join-Path $atlLegacy "include\atlbase.h"))) {
-            if (Test-Path $atlLegacy) { Remove-Item -Force -Recurse $atlLegacy }
-            cmd /c mklink /J "$atlLegacy" "$atlSrc" | Out-Null
-          }
-          if (-not (Test-Path (Join-Path $atlLegacy "include\atlbase.h"))) { Write-Output "ATL not reachable"; exit 1 }
-          Write-Output "ATL ok at $atlLegacy"
-          "ATL_LIB=$atlLegacy\lib\x64" >> $env:GITHUB_ENV
-          Get-ChildItem "$atlLegacy\lib\x64\atls.lib" -ErrorAction SilentlyContinue | ForEach-Object { "found $($_.FullName)" }
-          $msvcLib = Join-Path $msvc.FullName "lib\x64"
-          Copy-Item (Join-Path $atlSrc "lib\x64\*.lib") $msvcLib -Force
-          Get-ChildItem (Join-Path $msvcLib "atls.lib") | ForEach-Object { "copied $($_.FullName)" }
-
-      - name: Libraries.
-        if: steps.cache-libs.outputs.cache-hit != 'true' || steps.cache-qt.outputs.cache-hit != 'true'
-        run: |
-          set "LIB=%ATL_LIB%;%LIB%"
-          if exist "%ATL_LIB%\atls.lib" (echo atls.lib present) else (echo atls.lib MISSING)
-          if /I "%BUILD_CONFIG%"=="Release" (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent qt6) else (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent qt6)
-
   windows:
-    name: Windows x64 Qt6
-    needs: libraries
+    name: Windows x64 (${{ inputs.config || 'Release' }})
     runs-on: windows-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
 
     defaults:
       run:
@@ -192,6 +53,7 @@ jobs:
             }
           }
           Get-PSDrive C | ForEach-Object { "C: free = $([math]::Round($_.Free/1GB,1)) GB" }
+
       - name: Prepare directories.
         run: |
           mkdir %userprofile%\TBuild\Libraries
@@ -221,27 +83,92 @@ jobs:
           if [ "$BUILD_CONFIG" = "Release" ]; then echo "release" >> CACHE_KEY.txt; fi
           echo "CACHE_KEY=$(sha256sum CACHE_KEY.txt | awk '{ print $1 }')" >> $GITHUB_ENV
 
+      - name: Visual Studio ATL component.
+        shell: pwsh
+        run: |
+          $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+          $vswhere = Join-Path $installer 'vswhere.exe'
+          $setup = Join-Path $installer 'setup.exe'
+          if (-not (Test-Path $vswhere) -or -not (Test-Path $setup)) {
+            throw "Visual Studio Installer is incomplete at $installer."
+          }
+
+          $toolsComponent = 'Microsoft.VisualStudio.Component.VC.14.44.17.14.x86.x64'
+          $atlComponent = 'Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL'
+          $path = @(& $vswhere -latest -products '*' -requires $toolsComponent -property installationPath)[0]
+          if (-not $path) {
+            throw "No Visual Studio instance provides $toolsComponent."
+          }
+
+          $toolset = Get-ChildItem (Join-Path $path 'VC\Tools\MSVC') -Directory `
+            | Where-Object { $_.Name -like '14.44.*' } `
+            | Sort-Object Name -Descending `
+            | Select-Object -First 1
+          if (-not $toolset) {
+            throw "The selected Visual Studio instance has no 14.44 toolset."
+          }
+          $header = Join-Path $toolset.FullName 'atlmfc\include\atlbase.h'
+          if (-not (Test-Path $header)) {
+            Write-Host "Installing $atlComponent..."
+            $process = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+              'modify',
+              '--installPath', "`"$path`"",
+              '--add', $atlComponent,
+              '--quiet', '--norestart', '--nocache'
+            )
+            if ($process.ExitCode -notin @(0, 3010)) {
+              throw "Visual Studio Installer exited with $($process.ExitCode)."
+            }
+            if (-not (Test-Path $header)) {
+              throw "$atlComponent completed without installing $header."
+            }
+          } else {
+            Write-Host "ATL is already installed for $($toolset.Name)."
+          }
+
+          # Legacy junction for breakpad gyp which hardcodes VC\atlmfc
+          $atlLegacy = Join-Path $path "VC\atlmfc"
+          if (-not (Test-Path (Join-Path $atlLegacy "include\atlbase.h"))) {
+            if (Test-Path $atlLegacy) { Remove-Item -Force -Recurse $atlLegacy }
+            cmd /c mklink /J "$atlLegacy" "$($toolset.FullName)\atlmfc" | Out-Null
+          }
+
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
         with:
           arch: x64
           sdk: ${{ env.SDK }}
-          toolset: 14.44
+          toolset: '14.44'
+
+      - name: Verify Visual Studio ATL component.
+        shell: pwsh
+        run: |
+          $atlInclude = Join-Path $env:VCToolsInstallDir 'atlmfc\include'
+          $header = Join-Path $atlInclude 'atlbase.h'
+          if (-not (Test-Path $header)) {
+            throw "The selected toolset has no ATL header at $header."
+          }
+          if (($env:INCLUDE -split ';') -notcontains $atlInclude) {
+            throw "The selected toolset did not add $atlInclude to INCLUDE."
+          }
+          Write-Host "Verified ATL header at $header and in INCLUDE."
 
       - name: NuGet sources.
         run: |
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
           nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
 
-      - name: ThirdParty cache.
-        uses: actions/cache@v6
+      - name: Restore ThirdParty cache.
+        id: cache-third-party
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
           key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-${{ runner.arch }}-third-party-
 
-      - name: Libraries cache.
-        uses: actions/cache@v6
+      - name: Restore Libraries cache.
+        id: cache-libs
+        uses: actions/cache/restore@v6
         with:
           path: |
             ${{ env.LibrariesPath }}\*
@@ -252,8 +179,9 @@ jobs:
           key: ${{ runner.OS }}-x64-libs-v2-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-x64-libs-v2-
 
-      - name: Qt cache.
-        uses: actions/cache@v6
+      - name: Restore Qt cache.
+        id: cache-qt
+        uses: actions/cache/restore@v6
         with:
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
@@ -261,9 +189,55 @@ jobs:
           key: ${{ runner.OS }}-x64-qt6-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-x64-qt6-
 
-      - name: Free up some disk space.
+      - name: Libraries.
+        if: steps.cache-libs.outputs.cache-hit != 'true' || steps.cache-qt.outputs.cache-hit != 'true'
+        run: |
+          if /I "%BUILD_CONFIG%"=="Release" (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent qt6) else (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent qt6)
+
+      - name: Prune library build artifacts.
         shell: bash
-        run: find $LibrariesPath -type f ! -name '*.lib' ! -name '*.a' ! -name '*.exe' ! -name '*.h' ! -name '*.hpp' ! -name '*.inc' ! -name '*.cmake' ! -name '*.pc' ! -name '*.cpp' ! -path '*/include/*' ! -path '*/objects-*' ! -path '*/cache_keys/*' ! -path '*/patches/*' ! -path '*/nv-codec-headers/*' ! -path '*/tdesktop_rust/*' ! -path '*/wallet-engine/*' -delete
+        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path '*/nv-codec-headers/*' -o -path '*/src/wallet_engine/*' -o '(' '(' -path '*/tlottie/*' -o -path '*/wallet-engine/*' ')' ! -path '*/target/*' ')' ')' -type f ')' -o '(' -empty ! -path '*/tlottie/*' ! -path '*/wallet-engine/*' ')' ')' -delete
+
+      - name: Save ThirdParty cache.
+        if: steps.cache-third-party.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: ${{ steps.cache-third-party.outputs.cache-primary-key }}
+
+      - name: Save Libraries cache.
+        if: steps.cache-libs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\*
+            !${{ env.LibrariesPath }}\cache_keys
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ steps.cache-libs.outputs.cache-primary-key }}
+
+      - name: Save Qt cache.
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ steps.cache-qt.outputs.cache-primary-key }}
+
+      - name: Generate a stub DesktopPrivate.
+        shell: bash
+        run: |
+          mkdir -p $TBUILD/DesktopPrivate
+          random_key() {
+            printf -- '-----BEGIN RSA PRIVATE KEY-----\n%s\n-----END RSA PRIVATE KEY-----\n' \
+              "$(head -c 96 /dev/urandom | base64 | tr -d '\n')"
+          }
+          printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\n' \
+            "$(random_key)" "$(random_key)" > $TBUILD/DesktopPrivate/packer_private.h
+          printf 'static const char *AlphaPrivateKey = "%s";\n' \
+            "$(random_key)" > $TBUILD/DesktopPrivate/alpha_private.h
 
       - name: Telegram Desktop configure.
         run: |
