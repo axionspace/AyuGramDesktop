@@ -53,12 +53,6 @@ jobs:
             }
           }
           Get-PSDrive C | ForEach-Object { "C: free = $([math]::Round($_.Free/1GB,1)) GB" }
-          if (Test-Path 'C:\hostedtoolcache') {
-            Get-ChildItem 'C:\hostedtoolcache' | Where-Object { $_.Name -notlike 'Python*' } | ForEach-Object {
-              try { Remove-Item -Recurse -Force $_.FullName -ErrorAction SilentlyContinue } catch { }
-            }
-          }
-          Get-PSDrive C | ForEach-Object { "C: free after hostedtoolcache = $([math]::Round($_.Free/1GB,1)) GB" }
 
       - name: Prepare directories.
         run: |
