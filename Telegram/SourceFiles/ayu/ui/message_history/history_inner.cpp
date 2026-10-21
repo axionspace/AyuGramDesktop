@@ -604,6 +604,10 @@ bool InnerWidget::elementShownUnread(not_null<const Element*> view) {
 	return false;
 }
 
+HistoryView::GramReadLine *InnerWidget::elementGramReadLine() {
+	return nullptr;
+}
+
 void InnerWidget::elementSendBotCommand(
 	const QString &command,
 	const FullMsgId &context) {

@@ -324,7 +324,6 @@ private:
 	SendFilesCheck _check;
 	SendFilesConfirmed _confirmedCallback;
 	Fn<void()> _cancelledCallback;
-	Fn<void()> _cancelledCallback;
 	Fn<void(const TextWithTags &text)> _cancelled2Callback;
 	Fn<bool()> _stashCheck;
 	SendFilesStash _stashCallback;
