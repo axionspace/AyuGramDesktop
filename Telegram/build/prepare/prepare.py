@@ -295,32 +295,26 @@ def filterByPlatform(commands):
     dependencies = []
     version = '0'
     skip = False
+    platform_inscope = True
     for command in commands:
         m = re.match(r'(!?)([a-z0-9_]+):', command)
         if m and m.group(2) != 'depends' and m.group(2) != 'version':
             scopes = m.group(2).split('_')
-            inscope = 'common' in scopes
-            if win and 'win' in scopes:
-                inscope = True
-            if win32 and 'win32' in scopes:
-                inscope = True
-            if win64 and 'win64' in scopes:
-                inscope = True
-            if winarm and 'winarm' in scopes:
-                inscope = True
-            if mac and 'mac' in scopes:
-                inscope = True
-            # if linux and 'linux' in scopes:
-            #     inscope = True
-            if 'release' in scopes:
-                if 'skip-release' in options:
-                    inscope = False
-                elif len(scopes) == 1:
-                    continue
-            if 'nodebug' in scopes:
-                inscope = 'skip-debug' in options
-            if 'asserts' in scopes:
-                inscope = inscope and 'qt-asserts' in options
+            has_platform = any(s in ['common', 'win', 'win32', 'win64', 'winarm', 'mac', 'linux'] for s in scopes)
+            if has_platform:
+                platform_inscope = ('common' in scopes) or \
+                    (win and 'win' in scopes) or \
+                    (win32 and 'win32' in scopes) or \
+                    (win64 and 'win64' in scopes) or \
+                    (winarm and 'winarm' in scopes) or \
+                    (mac and 'mac' in scopes)
+            inscope = platform_inscope
+            if 'release' in scopes and 'skip-release' in options:
+                inscope = False
+            if 'debug' in scopes and 'skip-debug' in options:
+                inscope = False
+            if 'asserts' in scopes and 'qt-asserts' not in options:
+                inscope = False
             skip = inscope if m.group(1) == '!' else not inscope
         elif not skip and not re.match(r'\s*#', command):
             if m and m.group(2) == 'version':
@@ -1509,13 +1503,10 @@ depends:python/Scripts/activate.bat
     cd src\\client\\windows
     gyp --no-circular-check breakpad_client.gyp --format=ninja
     cd ..\\..
-!nodebug:
+debug:
     ninja -C out/Debug%FolderPostfix% common crash_generation_client exception_handler
 release:
     ninja -C out/Release%FolderPostfix% common crash_generation_client exception_handler
-    cd tools\\windows\\dump_syms
-    gyp dump_syms.gyp --format=msvs
-    msbuild -m dump_syms.vcxproj /property:Configuration=Release /property:Platform="x64" %ToolsetProp%
 win:
     deactivate
 mac:
@@ -1730,8 +1721,7 @@ win:
     SET ASSERTS=
 release:
     SET CONFIGURATIONS=-debug-and-release
-nodebug:
-    SET CONFIGURATIONS=-release
+""" + ("win:\n    SET CONFIGURATIONS=-release\n" if 'skip-debug' in options else "") + """
 win_asserts:
     SET ASSERTS=-force-asserts
 win:
@@ -1782,9 +1772,9 @@ win:
         -D LCMS2_INCLUDE_DIR="%LCMS2_DIR%\\include" ^
         -D LCMS2_LIBRARIES="%LCMS2_DIR%\\out\\Release\\src\\liblcms2.a"
 
-!nodebug:
+debug:
     cmake --build . --config Debug
-!nodebug:
+debug:
     cmake --install . --config Debug
 win:
     cmake --build .
@@ -1813,7 +1803,7 @@ win:
         -DTG_OWT_LIBVPX_INCLUDE_PATH=$LIBVPX_PATH \
         -DTG_OWT_OPENH264_INCLUDE_PATH=$OPENH264_PATH \
         -DTG_OWT_FFMPEG_INCLUDE_PATH=$FFMPEG_PATH
-!nodebug:
+debug:
     cmake --build out --config Debug
 release:
     cmake --build out --config Release
