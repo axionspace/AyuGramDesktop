@@ -149,6 +149,9 @@ jobs:
           Write-Output "ATL ok at $atlLegacy"
           "ATL_LIB=$atlLegacy\lib\x64" >> $env:GITHUB_ENV
           Get-ChildItem "$atlLegacy\lib\x64\atls.lib" -ErrorAction SilentlyContinue | ForEach-Object { "found $($_.FullName)" }
+          $msvcLib = Join-Path $msvc.FullName "lib\x64"
+          Copy-Item (Join-Path $atlSrc "lib\x64\*.lib") $msvcLib -Force
+          Get-ChildItem (Join-Path $msvcLib "atls.lib") | ForEach-Object { "copied $($_.FullName)" }
 
       - name: Libraries.
         if: steps.cache-libs.outputs.cache-hit != 'true' || steps.cache-qt.outputs.cache-hit != 'true'
