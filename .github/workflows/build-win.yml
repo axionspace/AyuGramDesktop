@@ -128,16 +128,25 @@ jobs:
       - name: Install ATL.
         shell: pwsh
         run: |
-          $found = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
-          if ($found) { Write-Output "ATL present"; exit 0 }
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vsPath = & $vswhere -latest -products * -property installationPath
-          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-          $argLine = "modify --installPath `"$vsPath`" --add Microsoft.VisualStudio.Component.VC.ATL --quiet --norestart --nocache"
-          $p = Start-Process -FilePath $installer -ArgumentList $argLine -Wait -PassThru
-          Write-Output "installer exit $($p.ExitCode)"
-          $found = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
-          if (-not $found) { Write-Output "ATL still missing"; exit 1 }
+          $msvc = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+          $atlSrc = if ($msvc) { Join-Path $msvc.FullName "atlmfc" } else { $null }
+          if (-not $atlSrc -or -not (Test-Path (Join-Path $atlSrc "include\atlbase.h"))) {
+            $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+            $argLine = "modify --installPath `"$vsPath`" --add Microsoft.VisualStudio.Component.VC.ATL --quiet --norestart --nocache"
+            $p = Start-Process -FilePath $installer -ArgumentList $argLine -Wait -PassThru
+            Write-Output "installer exit $($p.ExitCode)"
+            $msvc = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+            $atlSrc = Join-Path $msvc.FullName "atlmfc"
+          }
+          $atlLegacy = Join-Path $vsPath "VC\atlmfc"
+          if (-not (Test-Path (Join-Path $atlLegacy "include\atlbase.h"))) {
+            if (Test-Path $atlLegacy) { Remove-Item -Force -Recurse $atlLegacy }
+            cmd /c mklink /J "$atlLegacy" "$atlSrc" | Out-Null
+          }
+          if (-not (Test-Path (Join-Path $atlLegacy "include\atlbase.h"))) { Write-Output "ATL not reachable"; exit 1 }
+          Write-Output "ATL ok at $atlLegacy"
 
       - name: Libraries.
         if: steps.cache-libs.outputs.cache-hit != 'true' || steps.cache-qt.outputs.cache-hit != 'true'
