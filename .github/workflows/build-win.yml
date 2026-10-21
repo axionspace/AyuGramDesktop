@@ -147,10 +147,14 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $atlLegacy "include\atlbase.h"))) { Write-Output "ATL not reachable"; exit 1 }
           Write-Output "ATL ok at $atlLegacy"
+          "ATL_LIB=$atlLegacy\lib\x64" >> $env:GITHUB_ENV
+          Get-ChildItem "$atlLegacy\lib\x64\atls.lib" -ErrorAction SilentlyContinue | ForEach-Object { "found $($_.FullName)" }
 
       - name: Libraries.
         if: steps.cache-libs.outputs.cache-hit != 'true' || steps.cache-qt.outputs.cache-hit != 'true'
         run: |
+          set "LIB=%ATL_LIB%;%LIB%"
+          if exist "%ATL_LIB%\atls.lib" (echo atls.lib present) else (echo atls.lib MISSING)
           if /I "%BUILD_CONFIG%"=="Release" (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent qt6) else (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent qt6)
 
   windows:
