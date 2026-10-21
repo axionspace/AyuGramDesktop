@@ -247,7 +247,8 @@ jobs:
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\%BUILD_CONFIG%
           mkdir artifact
-          copy %OUT%\Telegram.exe artifact\
+          if exist %OUT%\AyuGram.exe copy %OUT%\AyuGram.exe artifact\
+          if exist %OUT%\Telegram.exe copy %OUT%\Telegram.exe artifact\
           if exist %OUT%\Updater.exe copy %OUT%\Updater.exe artifact\
           dir artifact
 
