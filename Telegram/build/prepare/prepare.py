@@ -61,6 +61,7 @@ usedPrefix = os.path.realpath(os.path.join(libsDir, 'local'))
 optionsList = [
     'qt6',
     'skip-release',
+    'skip-debug',
     'build-stackwalk',
     'qt-asserts',
 ]
@@ -316,6 +317,8 @@ def filterByPlatform(commands):
                     inscope = False
                 elif len(scopes) == 1:
                     continue
+            if 'nodebug' in scopes:
+                inscope = 'skip-debug' in options
             if 'asserts' in scopes:
                 inscope = inscope and 'qt-asserts' in options
             skip = inscope if m.group(1) == '!' else not inscope
@@ -1506,6 +1509,7 @@ depends:python/Scripts/activate.bat
     cd src\\client\\windows
     gyp --no-circular-check breakpad_client.gyp --format=ninja
     cd ..\\..
+!nodebug:
     ninja -C out/Debug%FolderPostfix% common crash_generation_client exception_handler
 release:
     ninja -C out/Release%FolderPostfix% common crash_generation_client exception_handler
@@ -1726,6 +1730,8 @@ win:
     SET ASSERTS=
 release:
     SET CONFIGURATIONS=-debug-and-release
+nodebug:
+    SET CONFIGURATIONS=-release
 win_asserts:
     SET ASSERTS=-force-asserts
 win:
@@ -1776,8 +1782,11 @@ win:
         -D LCMS2_INCLUDE_DIR="%LCMS2_DIR%\\include" ^
         -D LCMS2_LIBRARIES="%LCMS2_DIR%\\out\\Release\\src\\liblcms2.a"
 
+!nodebug:
     cmake --build . --config Debug
+!nodebug:
     cmake --install . --config Debug
+win:
     cmake --build .
     cmake --install .
 """)
@@ -1804,6 +1813,7 @@ win:
         -DTG_OWT_LIBVPX_INCLUDE_PATH=$LIBVPX_PATH \
         -DTG_OWT_OPENH264_INCLUDE_PATH=$OPENH264_PATH \
         -DTG_OWT_FFMPEG_INCLUDE_PATH=$FFMPEG_PATH
+!nodebug:
     cmake --build out --config Debug
 release:
     cmake --build out --config Release

@@ -53,6 +53,12 @@ jobs:
             }
           }
           Get-PSDrive C | ForEach-Object { "C: free = $([math]::Round($_.Free/1GB,1)) GB" }
+          if (Test-Path 'C:\hostedtoolcache') {
+            Get-ChildItem 'C:\hostedtoolcache' | Where-Object { $_.Name -notlike 'Python*' } | ForEach-Object {
+              try { Remove-Item -Recurse -Force $_.FullName -ErrorAction SilentlyContinue } catch { }
+            }
+          }
+          Get-PSDrive C | ForEach-Object { "C: free after hostedtoolcache = $([math]::Round($_.Free/1GB,1)) GB" }
 
       - name: Prepare directories.
         run: |
@@ -192,7 +198,7 @@ jobs:
       - name: Libraries.
         if: steps.cache-libs.outputs.cache-hit != 'true' || steps.cache-qt.outputs.cache-hit != 'true'
         run: |
-          if /I "%BUILD_CONFIG%"=="Release" (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent qt6) else (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent qt6)
+          if /I "%BUILD_CONFIG%"=="Release" (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-debug silent qt6) else (%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent qt6)
 
       - name: Prune library build artifacts.
         shell: bash
