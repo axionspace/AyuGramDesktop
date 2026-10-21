@@ -125,6 +125,20 @@ jobs:
           key: ${{ runner.OS }}-x64-qt6-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-x64-qt6-
 
+      - name: Install ATL.
+        shell: pwsh
+        run: |
+          $found = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          if ($found) { Write-Output "ATL present"; exit 0 }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -property installationPath
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+          $argLine = "modify --installPath `"$vsPath`" --add Microsoft.VisualStudio.Component.VC.ATL --quiet --norestart --nocache"
+          $p = Start-Process -FilePath $installer -ArgumentList $argLine -Wait -PassThru
+          Write-Output "installer exit $($p.ExitCode)"
+          $found = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          if (-not $found) { Write-Output "ATL still missing"; exit 1 }
+
       - name: Libraries.
         if: steps.cache-libs.outputs.cache-hit != 'true' || steps.cache-qt.outputs.cache-hit != 'true'
         run: |
