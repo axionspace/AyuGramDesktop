@@ -22,6 +22,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/update_unpack.h"
 #include "core/update_verify.h"
 #include "core/version.h"
+#include "core/utils.h"
+
+#ifndef TDESKTOP_DISABLE_AUTOUPDATE
+#if defined Q_OS_WIN && !defined TDESKTOP_USE_PACKAGED
+#include <LzmaLib.h>
+#else
+#include <lzma.h>
+#endif
+#endif
 #include "data/data_channel.h"
 #include "data/data_session.h"
 #include "mainwindow.h"
@@ -546,6 +555,131 @@ enum class ManifestAdoption {
 	return true;
 }
 
+[[nodiscard]] std::optional<QByteArray> DecompressUpdatePayloadV1(
+		const char *data,
+		int32 size) {
+#if defined Q_OS_WIN && !defined TDESKTOP_USE_PACKAGED
+	const int32 hPropsLen = LZMA_PROPS_SIZE;
+#else
+	const int32 hPropsLen = 0;
+#endif
+	const int32 hOriginalSizeLen = sizeof(int32);
+	const int32 hSize = hPropsLen + hOriginalSizeLen;
+	const int32 compressedLen = size - hSize;
+	if (compressedLen <= 0) {
+		LOG(("Update Error: bad compressed size: %1").arg(size));
+		return std::nullopt;
+	}
+
+	QByteArray uncompressed;
+
+	int32 uncompressedLen = 0;
+	memcpy(&uncompressedLen, data + hPropsLen, hOriginalSizeLen);
+	if (uncompressedLen <= 0 || uncompressedLen > 1024 * 1024 * 1024) {
+		LOG(("Update Error: bad uncompressed size: %1").arg(uncompressedLen));
+		return std::nullopt;
+	}
+
+	uncompressed.resize(uncompressedLen);
+
+#if defined Q_OS_WIN && !defined TDESKTOP_USE_PACKAGED
+	size_t resultLen = uncompressed.size();
+	SizeT srcLen = compressedLen;
+	int uncompressRes = LzmaUncompress(
+		(uchar*)uncompressed.data(),
+		&resultLen,
+		(const uchar*)(data + hSize),
+		&srcLen,
+		(const uchar*)data,
+		LZMA_PROPS_SIZE);
+	if (uncompressRes != SZ_OK) {
+		LOG(("Update Error: could not decompress update!"));
+		return std::nullopt;
+	}
+	if (resultLen != size_t(uncompressed.size()) || srcLen != size_t(compressedLen)) {
+		LOG(("Update Error: bad uncompressed size: %1, was: %2").arg(resultLen).arg(uncompressed.size()));
+		return std::nullopt;
+	}
+#else
+	lzma_stream stream = LZMA_STREAM_INIT;
+	lzma_ret ret = lzma_stream_decoder(&stream, 1024 * 1024 * 1024, LZMA_CONCATENATED);
+	if (ret != LZMA_OK) {
+		LOG(("Update Error: could not initialize lzma decoder, error code: %1").arg(ret));
+		return std::nullopt;
+	}
+	stream.avail_in = compressedLen;
+	stream.next_in = (uint8_t*)(data + hSize);
+	stream.avail_out = uncompressed.size();
+	stream.next_out = (uint8_t*)uncompressed.data();
+
+	ret = lzma_code(&stream, LZMA_FINISH);
+	lzma_end(&stream);
+
+	if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
+		LOG(("Update Error: could not decompress lzma stream, error code: %1").arg(ret));
+		return std::nullopt;
+	}
+	if (stream.avail_in != 0 || stream.avail_out != 0) {
+		LOG(("Update Error: bad decompressed data, in: %1, out: %2").arg(stream.avail_in).arg(stream.avail_out));
+		return std::nullopt;
+	}
+#endif
+
+	return uncompressed;
+}
+
+[[nodiscard]] bool ExtractUpdateFilesV1(
+		QDataStream &stream,
+		quint32 filesCount,
+		const QString &tempDirPath) {
+	for (uint32 i = 0; i < filesCount; ++i) {
+		QString relativeName;
+		quint32 fileSize = 0;
+		QByteArray fileInnerData;
+		bool executable = false;
+
+		stream >> relativeName >> fileSize >> fileInnerData;
+#ifndef Q_OS_WIN
+		stream >> executable;
+#endif
+		if (stream.status() != QDataStream::Ok) {
+			LOG(("Update Error: cant read file from downloaded stream, status: %1").arg(stream.status()));
+			return false;
+		}
+		if (fileSize != quint32(fileInnerData.size())) {
+			LOG(("Update Error: bad file size %1 not matching data size %2").arg(fileSize).arg(fileInnerData.size()));
+			return false;
+		}
+		if (!fileSize) {
+			LOG(("Update Error: zero file size!"));
+			return false;
+		}
+
+		auto absolutePath = tempDirPath + '/' + relativeName;
+		if (QFile::exists(absolutePath)) {
+			LOG(("Update Error: file already exists: %1").arg(absolutePath));
+			return false;
+		}
+		QDir().mkpath(QFileInfo(absolutePath).absolutePath());
+		QFile file(absolutePath);
+		if (!file.open(QIODevice::WriteOnly)) {
+			LOG(("Update Error: cant write file: %1").arg(absolutePath));
+			return false;
+		}
+		if (file.write(fileInnerData) != fileSize) {
+			LOG(("Update Error: cant write file content: %1").arg(absolutePath));
+			return false;
+		}
+#ifndef Q_OS_WIN
+		if (executable) {
+			file.setPermissions(file.permissions() | QFileDevice::ExeOwner | QFileDevice::ExeUser | QFileDevice::ExeGroup | QFileDevice::ExeOther);
+		}
+#endif
+		file.close();
+	}
+	return true;
+}
+
 #endif // !TDESKTOP_DISABLE_AUTOUPDATE
 
 bool UnpackUpdate(const QString &filepath) {
@@ -594,15 +728,111 @@ bool UnpackUpdate(const QString &filepath) {
 	input.close();
 #endif // Q_OS_WIN || Q_OS_MAC
 
-	if (!Updates::IsV2UpdateFile(compressed)) {
-		LOG(("Update Error: unsupported update format (missing v2 magic)."));
+#if defined Q_OS_WIN && !defined TDESKTOP_USE_PACKAGED
+	const int32 hSigLen = 128, hShaLen = 20, hPropsLen = LZMA_PROPS_SIZE, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hPropsLen + hOriginalSizeLen;
+#else
+	const int32 hSigLen = 128, hShaLen = 20, hPropsLen = 0, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hOriginalSizeLen;
+#endif
+
+	int32 compressedLen = compressed.size() - hSize;
+	if (compressedLen <= 0) {
+		LOG(("Update Error: bad compressed size: %1").arg(compressed.size()));
 		return false;
 	}
-	// AyuGram: official update packages would replace this build with the
-	// stock Telegram Desktop client, so they are never installed. Report
-	// the error properly instead of unpacking the package.
-	LOG(("Update Error: AyuGram builds don't install official updates."));
-	return false;
+
+	QString tempDirPath = cWorkingDir() + u"tupdates/temp"_q, readyFilePath = cWorkingDir() + u"tupdates/temp/ready"_q;
+	base::Platform::DeleteDirectory(tempDirPath);
+
+	QDir tempDir(tempDirPath);
+	if (tempDir.exists() || QFile(readyFilePath).exists()) {
+		LOG(("Update Error: cant clear tupdates/temp dir!"));
+		return false;
+	}
+
+	uchar sha1Buffer[20];
+	hashSha1(compressed.constData() + hSigLen + hShaLen, uint32(compressedLen + hPropsLen + hOriginalSizeLen), sha1Buffer);
+	bool goodSha1 = !memcmp(compressed.constData() + hSigLen, sha1Buffer, hShaLen);
+	if (!goodSha1) {
+		LOG(("Update Error: bad SHA1 hash of update file!"));
+		return false;
+	}
+
+	RSA *pbKey = [] {
+		const auto bio = MakeBIO(
+			const_cast<char*>(UpdatesPublicKey),
+			-1);
+		return PEM_read_bio_RSAPublicKey(bio.get(), 0, 0, 0);
+	}();
+	if (!pbKey) {
+		LOG(("Update Error: cant read public rsa key!"));
+		return false;
+	}
+	if (RSA_verify(NID_sha1, (const uchar*)(compressed.constData() + hSigLen), hShaLen, (const uchar*)(compressed.constData()), hSigLen, pbKey) != 1) {
+		RSA_free(pbKey);
+		LOG(("Update Error: bad RSA signature of update file!"));
+		return false;
+	}
+	RSA_free(pbKey);
+
+	const auto uncompressed = DecompressUpdatePayloadV1(
+		compressed.constData() + hSigLen + hShaLen,
+		compressed.size() - hSigLen - hShaLen);
+	if (!uncompressed) {
+		return false;
+	}
+
+	tempDir.mkdir(tempDir.absolutePath());
+
+	quint32 version = 0;
+	{
+		QDataStream stream(*uncompressed);
+		stream.setVersion(QDataStream::Qt_5_1);
+
+		stream >> version;
+		if (stream.status() != QDataStream::Ok) {
+			LOG(("Update Error: cant read version from downloaded stream, status: %1").arg(stream.status()));
+			return false;
+		}
+
+		quint64 alphaVersion = 0;
+		if (version == 0x7FFFFFFF) {
+			stream >> alphaVersion;
+			if (stream.status() != QDataStream::Ok) {
+				LOG(("Update Error: cant read alpha version from downloaded stream, status: %1").arg(stream.status()));
+				return false;
+			}
+			if (!cAlphaVersion() || alphaVersion <= cAlphaVersion()) {
+				LOG(("Update Error: downloaded alpha version %1 is not greater, than mine %2").arg(alphaVersion).arg(cAlphaVersion()));
+				return false;
+			}
+		} else if (int32(version) <= AppVersion) {
+			LOG(("Update Error: downloaded version %1 is not greater, than mine %2").arg(version).arg(AppVersion));
+			return false;
+		}
+
+		quint32 filesCount = 0;
+		stream >> filesCount;
+		if (stream.status() != QDataStream::Ok || !filesCount) {
+			LOG(("Update Error: cant read files count from downloaded stream, status: %1").arg(stream.status()));
+			return false;
+		}
+
+		if (!ExtractUpdateFilesV1(stream, filesCount, tempDirPath)
+			|| !WriteUpdateVersionFile(
+				tempDir,
+				tempDirPath,
+				version,
+				0)) {
+			return false;
+		}
+	}
+
+	if (!WriteUpdateReadyFile(readyFilePath)) {
+		return false;
+	}
+	QFile(filepath).remove();
+
+	return true;
 #else // !TDESKTOP_DISABLE_AUTOUPDATE
 	return false;
 #endif // TDESKTOP_DISABLE_AUTOUPDATE
@@ -850,10 +1080,13 @@ std::optional<QString> HttpChecker::parseResponse(
 	if (!result) {
 		return std::nullopt;
 	}
+	const auto fullUrl = bestLink.startsWith(u"https://"_q) || bestLink.startsWith(u"http://"_q)
+		? bestLink
+		: (Local::readAutoupdatePrefix() + '/' + bestLink);
 	return validateLatestUrl(
 		bestAvailableVersion,
 		bestIsAvailableAlpha,
-		Local::readAutoupdatePrefix() + bestLink);
+		fullUrl);
 }
 
 QString HttpChecker::validateLatestUrl(

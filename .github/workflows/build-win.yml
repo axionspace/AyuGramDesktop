@@ -226,36 +226,47 @@ jobs:
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: ${{ steps.cache-qt.outputs.cache-primary-key }}
 
-      - name: Generate a stub DesktopPrivate.
+      - name: Generate DesktopPrivate.
+        env:
+          AYUGRAM_UPDATE_KEY: ${{ secrets.AYUGRAM_UPDATE_KEY }}
         shell: bash
         run: |
           mkdir -p $TBUILD/DesktopPrivate
-          random_key() {
-            printf -- '-----BEGIN RSA PRIVATE KEY-----\n%s\n-----END RSA PRIVATE KEY-----\n' \
-              "$(head -c 96 /dev/urandom | base64 | tr -d '\n')"
-          }
-          printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\n' \
-            "$(random_key)" "$(random_key)" > $TBUILD/DesktopPrivate/packer_private.h
-          printf 'static const char *AlphaPrivateKey = "%s";\n' \
-            "$(random_key)" > $TBUILD/DesktopPrivate/alpha_private.h
+          if [ -n "$AYUGRAM_UPDATE_KEY" ]; then
+            printf 'const char *PrivateKey = R"(\n%s\n)";\nconst char *PrivateBetaKey = PrivateKey;\n' \
+              "$AYUGRAM_UPDATE_KEY" > $TBUILD/DesktopPrivate/packer_private.h
+          else
+            random_key() {
+              printf -- '-----BEGIN RSA PRIVATE KEY-----\n%s\n-----END RSA PRIVATE KEY-----\n' \
+                "$(head -c 96 /dev/urandom | base64 | tr -d '\n')"
+            }
+            printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\n' \
+              "$(random_key)" "$(random_key)" > $TBUILD/DesktopPrivate/packer_private.h
+          fi
+          printf 'static const char *AlphaPrivateKey = "";\n' > $TBUILD/DesktopPrivate/alpha_private.h
 
       - name: Telegram Desktop configure.
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
-          call configure.bat qt6 -G "Ninja Multi-Config" -D TDESKTOP_API_ID=2040 -D TDESKTOP_API_HASH=b18441a1ff607e10a989891a5462e627 -D CMAKE_CONFIGURATION_TYPES=%BUILD_CONFIG% -D CMAKE_COMPILE_WARNING_AS_ERROR=OFF -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
+          call configure.bat qt6 -G "Ninja Multi-Config" -D DESKTOP_APP_SPECIAL_TARGET=win64 -D TDESKTOP_API_ID=2040 -D TDESKTOP_API_HASH=b18441a1ff607e10a989891a5462e627 -D CMAKE_CONFIGURATION_TYPES=%BUILD_CONFIG% -D CMAKE_COMPILE_WARNING_AS_ERROR=OFF -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
 
       - name: Telegram Desktop build.
         run: |
           cd %TBUILD%\%REPO_NAME%
           cmake --build out --config %BUILD_CONFIG% --parallel -- -k 0
 
-      - name: Move artifact.
+      - name: Move artifact and create update package.
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\%BUILD_CONFIG%
           mkdir artifact
           if exist %OUT%\AyuGram.exe copy %OUT%\AyuGram.exe artifact\
-          if exist %OUT%\Telegram.exe copy %OUT%\Telegram.exe artifact\
           if exist %OUT%\Updater.exe copy %OUT%\Updater.exe artifact\
+          if exist %OUT%\Packer.exe (
+            cd %OUT%
+            Packer.exe -path AyuGram.exe -path Updater.exe -target win64 -version 7003003
+            copy tx64upd* %TBUILD%\%REPO_NAME%\artifact\
+            cd %TBUILD%\%REPO_NAME%
+          )
           dir artifact
 
       - uses: actions/upload-artifact@v7
@@ -264,3 +275,12 @@ jobs:
           name: AyuGram-Windows-x64-${{ env.BUILD_CONFIG }}
           path: artifact\
           retention-days: 7
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            artifact/AyuGram.exe
+            artifact/Updater.exe
+            artifact/tx64upd*

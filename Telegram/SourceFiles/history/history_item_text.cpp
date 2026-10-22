@@ -136,7 +136,6 @@ HistorySelectedTextParts AppendExtraCopyText(
 	result.texts.back().append(std::move(extra));
 	return std::move(result);
 }
-}
 
 TextForMimeData HistoryItemMainText(not_null<HistoryItem*> item) {
 	const auto media = item->media();

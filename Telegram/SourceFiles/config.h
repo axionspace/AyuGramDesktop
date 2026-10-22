@@ -44,19 +44,13 @@ inline const char *cGUIDStr() {
 
 static const char *UpdatesPublicKey = "\
 -----BEGIN RSA PUBLIC KEY-----\n\
-MIGJAoGBAOIENxe1sfT2t7b+HUMpnT6RnN/sCqY0JjK7/1A/59daDc6i/K4023jw\n\
-Us+187Pa2VSaPh3kDywp9PfLDFgFiPTD9BsBvpaSK9p3zyG8k6an3+GbUTlUgmFv\n\
-eI0pg7vmceIl0Lcy9nndfEx27UQId3Y3dQTMuwwFYGtjJAMHNNq5AgMBAAE=\n\
+MIGJAoGBALWZ1RE3HSQPUrYlO8egM89AbyAwdgvTqRayxkk7i9aYx2zD2DF2x7cz\n\
+Fz2VhE0H1aUsAEyNPQShu0EaGjMMpVCpomeU2ugb9xNR4dUM6BjzjYy1UtOH0moP\n\
+oDy/hGfb813+KQ12yB0reVTZge+ecyJ5nRlkGhx15kp+N5LoCCmTAgMBAAE=\n\
 -----END RSA PUBLIC KEY-----\
 ";
 
-static const char *UpdatesPublicBetaKey = "\
------BEGIN RSA PUBLIC KEY-----\n\
-MIGJAoGBALWu9GGs0HED7KG7BM73CFZ6o0xufKBRQsdnq3lwA8nFQEvmdu+g/I1j\n\
-0LQ+0IQO7GW4jAgzF/4+soPDb6uHQeNFrlVx1JS9DZGhhjZ5rf65yg11nTCIHZCG\n\
-w/CVnbwQOw0g5GBwwFV3r0uTTvy44xx8XXxk+Qknu4eBCsmrAFNnAgMBAAE=\n\
------END RSA PUBLIC KEY-----\
-";
+static const char *UpdatesPublicBetaKey = UpdatesPublicKey;
 #if defined TDESKTOP_API_ID && defined TDESKTOP_API_HASH
 
 constexpr auto ApiId = TDESKTOP_API_ID;
