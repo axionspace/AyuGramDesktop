@@ -244,6 +244,7 @@ jobs:
               "$(random_key)" "$(random_key)" > $TBUILD/DesktopPrivate/packer_private.h
           fi
           printf 'static const char *AlphaPrivateKey = "";\n' > $TBUILD/DesktopPrivate/alpha_private.h
+          cp $TBUILD/DesktopPrivate/packer_private.h $TBUILD/$REPO_NAME/Telegram/SourceFiles/_other/packer_private.h
 
       - name: Telegram Desktop configure.
         run: |

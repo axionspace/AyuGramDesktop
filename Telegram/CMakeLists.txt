@@ -3076,7 +3076,7 @@ if (NOT DESKTOP_APP_DISABLE_AUTOUPDATE AND NOT build_macstore AND NOT build_wins
             core/update_verify.h
         )
 
-        target_include_directories(Packer PRIVATE ${src_loc})
+        target_include_directories(Packer PRIVATE ${src_loc} ${src_loc}/_other ${src_loc}/../../../DesktopPrivate)
 
         target_link_libraries(Packer
         PRIVATE
