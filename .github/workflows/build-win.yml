@@ -233,14 +233,14 @@ jobs:
         run: |
           mkdir -p $TBUILD/DesktopPrivate
           if [ -n "$AYUGRAM_UPDATE_KEY" ]; then
-            printf 'const char *PrivateKey = R"(\n%s\n)";\nconst char *PrivateBetaKey = PrivateKey;\n' \
+            printf 'const char *PrivateKey = R"(\n%s\n)";\nconst char *PrivateBetaKey = PrivateKey;\nconst char *AlphaPrivateKey = "";\n#define PACKER_ALPHA_PRIVATE_KEY_DEFINED\n' \
               "$AYUGRAM_UPDATE_KEY" > $TBUILD/DesktopPrivate/packer_private.h
           else
             random_key() {
               printf -- '-----BEGIN RSA PRIVATE KEY-----\n%s\n-----END RSA PRIVATE KEY-----\n' \
                 "$(head -c 96 /dev/urandom | base64 | tr -d '\n')"
             }
-            printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\n' \
+            printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\nconst char *AlphaPrivateKey = "";\n#define PACKER_ALPHA_PRIVATE_KEY_DEFINED\n' \
               "$(random_key)" "$(random_key)" > $TBUILD/DesktopPrivate/packer_private.h
           fi
           printf 'static const char *AlphaPrivateKey = "";\n' > $TBUILD/DesktopPrivate/alpha_private.h
