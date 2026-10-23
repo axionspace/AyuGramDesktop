@@ -14,7 +14,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   UPLOAD_ARTIFACT: "true"
@@ -268,6 +268,7 @@ jobs:
             copy tx64upd* %TBUILD%\%REPO_NAME%\artifact\
             cd %TBUILD%\%REPO_NAME%
           )
+          powershell -Command "Compress-Archive -Path 'artifact\AyuGram.exe', 'artifact\Updater.exe' -DestinationPath 'artifact\AyuGram.zip' -Force"
           dir artifact
 
       - uses: actions/upload-artifact@v7
@@ -284,4 +285,5 @@ jobs:
           files: |
             artifact/AyuGram.exe
             artifact/Updater.exe
+            artifact/AyuGram.zip
             artifact/tx64upd*
