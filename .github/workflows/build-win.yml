@@ -10,8 +10,6 @@ on:
         type: choice
         options: ['Release', 'Debug']
   push:
-    branches:
-      - dev
     tags:
       - 'v*'
 
@@ -261,7 +259,7 @@ jobs:
       - name: Move artifact and create update package.
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\%BUILD_CONFIG%
-          set ARTIFACT=%TBUILD%\%REPO_NAME%\artifact
+          set ARTIFACT=%GITHUB_WORKSPACE%\artifact
           if not exist "%ARTIFACT%" mkdir "%ARTIFACT%"
           if exist "%OUT%\AyuGram.exe" copy /y "%OUT%\AyuGram.exe" "%ARTIFACT%\"
           if exist "%OUT%\Updater.exe" copy /y "%OUT%\Updater.exe" "%ARTIFACT%\"
@@ -269,7 +267,7 @@ jobs:
             cd /d "%OUT%"
             "%OUT%\Packer.exe" -path AyuGram.exe -path Updater.exe -target win64 -version 7003003
             if exist tx64upd* copy /y tx64upd* "%ARTIFACT%\"
-            cd /d "%TBUILD%\%REPO_NAME%"
+            cd /d "%GITHUB_WORKSPACE%"
           )
           powershell -Command "Compress-Archive -Path '%ARTIFACT%\AyuGram.exe', '%ARTIFACT%\Updater.exe' -DestinationPath '%ARTIFACT%\AyuGram.zip' -Force"
           dir "%ARTIFACT%"
