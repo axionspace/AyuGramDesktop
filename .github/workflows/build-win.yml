@@ -261,17 +261,18 @@ jobs:
       - name: Move artifact and create update package.
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\%BUILD_CONFIG%
-          mkdir artifact
-          if exist %OUT%\AyuGram.exe copy %OUT%\AyuGram.exe artifact\
-          if exist %OUT%\Updater.exe copy %OUT%\Updater.exe artifact\
-          if exist %OUT%\Packer.exe (
-            cd %OUT%
-            Packer.exe -path AyuGram.exe -path Updater.exe -target win64 -version 7003003
-            copy tx64upd* %TBUILD%\%REPO_NAME%\artifact\
-            cd %TBUILD%\%REPO_NAME%
+          set ARTIFACT=%TBUILD%\%REPO_NAME%\artifact
+          if not exist "%ARTIFACT%" mkdir "%ARTIFACT%"
+          if exist "%OUT%\AyuGram.exe" copy /y "%OUT%\AyuGram.exe" "%ARTIFACT%\"
+          if exist "%OUT%\Updater.exe" copy /y "%OUT%\Updater.exe" "%ARTIFACT%\"
+          if exist "%OUT%\Packer.exe" (
+            cd /d "%OUT%"
+            "%OUT%\Packer.exe" -path AyuGram.exe -path Updater.exe -target win64 -version 7003003
+            if exist tx64upd* copy /y tx64upd* "%ARTIFACT%\"
+            cd /d "%TBUILD%\%REPO_NAME%"
           )
-          powershell -Command "Compress-Archive -Path 'artifact\AyuGram.exe', 'artifact\Updater.exe' -DestinationPath 'artifact\AyuGram.zip' -Force"
-          dir artifact
+          powershell -Command "Compress-Archive -Path '%ARTIFACT%\AyuGram.exe', '%ARTIFACT%\Updater.exe' -DestinationPath '%ARTIFACT%\AyuGram.zip' -Force"
+          dir "%ARTIFACT%"
 
       - uses: actions/upload-artifact@v7
         name: Upload artifact.
