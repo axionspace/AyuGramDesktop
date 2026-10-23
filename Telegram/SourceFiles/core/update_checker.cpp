@@ -636,7 +636,7 @@ enum class ManifestAdoption {
 		QString relativeName;
 		quint32 fileSize = 0;
 		QByteArray fileInnerData;
-		bool executable = false;
+		[[maybe_unused]] bool executable = false;
 
 		stream >> relativeName >> fileSize >> fileInnerData;
 #ifndef Q_OS_WIN
@@ -794,7 +794,7 @@ bool UnpackUpdate(const QString &filepath) {
 			return false;
 		}
 
-		quint64 alphaVersion = 0;
+		[[maybe_unused]] quint64 alphaVersion = 0;
 		if (version == 0x7FFFFFFF) {
 			stream >> alphaVersion;
 			if (stream.status() != QDataStream::Ok) {
