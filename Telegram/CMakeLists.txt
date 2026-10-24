@@ -2701,9 +2701,6 @@ if (WIN32)
         target_link_libraries(Telegram PRIVATE desktop-app::win_directx_helper)
     endif()
 
-    # Qt's dnslookup_win uses the system resolver, newer Qt builds don't pull it in.
-    target_link_libraries(Telegram PRIVATE dnsapi)
-
     if (DESKTOP_APP_WIN7_BASELINE)
         # ANGLE loads d3dcompiler_47.dll from modules folder next to exe.
         if (build_win64)
