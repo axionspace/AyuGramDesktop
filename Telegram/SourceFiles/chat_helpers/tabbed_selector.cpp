@@ -511,9 +511,12 @@ TabbedSelector::TabbedSelector(
 
 		rpl::merge(
 			session().premiumPossibleValue() | rpl::to_empty,
-			session().data().stickers().updated(hasMasksTab()
-				? Data::StickersType::Masks
-				: Data::StickersType::Stickers)
+			session().data().stickers().updated(
+				Data::StickersType::Stickers),
+			(hasMasksTab()
+				? session().data().stickers().updated(
+					Data::StickersType::Masks)
+				: rpl::never<>())
 		) | rpl::on_next([=] {
 			refreshStickers();
 		}, lifetime());
@@ -760,12 +763,27 @@ rpl::producer<> TabbedSelector::photoRequests() const {
 	return hasStickersTab() ? stickers()->photoRequests() : rpl::never<>();
 }
 
+auto TabbedSelector::reactionRequests() const
+-> rpl::producer<Data::ReactionId> {
+	return hasStickersTab()
+		? stickers()->reactionRequests()
+		: rpl::never<Data::ReactionId>();
+}
+
 rpl::producer<> TabbedSelector::audioRequests() const {
 	return hasStickersTab() ? stickers()->audioRequests() : rpl::never<>();
 }
 
 rpl::producer<> TabbedSelector::linkRequests() const {
 	return hasStickersTab() ? stickers()->linkRequests() : rpl::never<>();
+}
+
+rpl::producer<> TabbedSelector::locationRequests() const {
+	return hasStickersTab() ? stickers()->locationRequests() : rpl::never<>();
+}
+
+rpl::producer<> TabbedSelector::weatherRequests() const {
+	return hasStickersTab() ? stickers()->weatherRequests() : rpl::never<>();
 }
 
 auto TabbedSelector::choosingStickerUpdated() const

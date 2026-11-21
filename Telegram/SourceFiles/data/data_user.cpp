@@ -134,6 +134,15 @@ std::unique_ptr<Data::Forum> BotInfo::takeForumData() {
 	return nullptr;
 }
 
+void BotInfo::setInlineReturnTo(Dialogs::EntryState state) {
+	_inlineReturnThread = state.key.thread();
+	_inlineReturnTo = std::move(state);
+}
+
+Dialogs::EntryState BotInfo::inlineReturnTo() const {
+	return _inlineReturnThread ? _inlineReturnTo : Dialogs::EntryState();
+}
+
 Data::LastseenStatus LastseenFromMTP(
 		const MTPUserStatus &status,
 		Data::LastseenStatus currentStatus) {
@@ -844,6 +853,18 @@ UserData::ContactStatus UserData::contactStatus() const {
 
 bool UserData::isContact() const {
 	return (contactStatus() == ContactStatus::Contact);
+}
+
+bool UserData::isCloseFriend() const {
+	return (flags() & UserDataFlag::CloseFriend);
+}
+
+void UserData::setIsCloseFriend(bool is) {
+	if (is) {
+		addFlags(UserDataFlag::CloseFriend);
+	} else {
+		removeFlags(UserDataFlag::CloseFriend);
+	}
 }
 
 UserData::CallsStatus UserData::callsStatus() const {
