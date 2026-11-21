@@ -265,7 +265,7 @@ jobs:
           if exist "%OUT%\Updater.exe" copy /y "%OUT%\Updater.exe" "%ARTIFACT%\"
           if exist "%OUT%\Packer.exe" (
             cd /d "%OUT%"
-            "%OUT%\Packer.exe" -path AyuGram.exe -path Updater.exe -target win64 -version 7003003
+            "%OUT%\Packer.exe" -path AyuGram.exe -path Updater.exe -target win64 -version 7004005
             if exist tx64upd* copy /y tx64upd* "%ARTIFACT%\"
             cd /d "%GITHUB_WORKSPACE%"
           )
