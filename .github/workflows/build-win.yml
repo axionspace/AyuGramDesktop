@@ -258,20 +258,30 @@ jobs:
           cmake --build out --config %BUILD_CONFIG% --parallel -- -k 0
 
       - name: Move artifact and create update package.
+        env:
+          AYUGRAM_V2_RELEASE_KEY: ${{ secrets.AYUGRAM_V2_RELEASE_KEY }}
+        shell: bash
         run: |
-          set OUT=%TBUILD%\%REPO_NAME%\out\%BUILD_CONFIG%
-          set ARTIFACT=%GITHUB_WORKSPACE%\artifact
-          if not exist "%ARTIFACT%" mkdir "%ARTIFACT%"
-          if exist "%OUT%\AyuGram.exe" copy /y "%OUT%\AyuGram.exe" "%ARTIFACT%\"
-          if exist "%OUT%\Updater.exe" copy /y "%OUT%\Updater.exe" "%ARTIFACT%\"
-          if exist "%OUT%\Packer.exe" (
-            cd /d "%OUT%"
-            "%OUT%\Packer.exe" -path AyuGram.exe -path Updater.exe -target win64 -version 7004005
-            if exist tx64upd* copy /y tx64upd* "%ARTIFACT%\"
-            cd /d "%GITHUB_WORKSPACE%"
-          )
-          powershell -Command "Compress-Archive -Path '%ARTIFACT%\AyuGram.exe', '%ARTIFACT%\Updater.exe' -DestinationPath '%ARTIFACT%\AyuGram.zip' -Force"
-          dir "%ARTIFACT%"
+          OUT="$TBUILD/$REPO_NAME/out/$BUILD_CONFIG"
+          ARTIFACT="$GITHUB_WORKSPACE/artifact"
+          mkdir -p "$ARTIFACT"
+          [ -f "$OUT/AyuGram.exe" ] && cp -f "$OUT/AyuGram.exe" "$ARTIFACT/"
+          [ -f "$OUT/Updater.exe" ] && cp -f "$OUT/Updater.exe" "$ARTIFACT/"
+          if [ -f "$OUT/Packer.exe" ] && [ -n "$AYUGRAM_V2_RELEASE_KEY" ]; then
+            printf '%s\n' "$AYUGRAM_V2_RELEASE_KEY" > "$ARTIFACT/release-private.pem"
+            cp -f "$GITHUB_WORKSPACE/Telegram/Resources/update/manifest.min.json" "$ARTIFACT/manifest.min.json"
+            cp -f "$GITHUB_WORKSPACE/Telegram/Resources/update/manifest.sig" "$ARTIFACT/manifest.sig"
+            cp -f "$GITHUB_WORKSPACE/Telegram/Resources/update/root-public.pem" "$ARTIFACT/root-public.pem"
+            cd "$OUT"
+            "./Packer.exe" -path AyuGram.exe -path Updater.exe -target win64 -version 7004005 \
+              -channel stable -keys-loc "$ARTIFACT" \
+              -local-key "$ARTIFACT/release-private.pem" -local-key-id ayu-stable-2026
+            cp -f td-update-* "$ARTIFACT/" 2>/dev/null || true
+            rm -f "$ARTIFACT/release-private.pem"
+          fi
+          cd "$GITHUB_WORKSPACE"
+          powershell -Command "Compress-Archive -Path '$ARTIFACT/AyuGram.exe', '$ARTIFACT/Updater.exe' -DestinationPath '$ARTIFACT/AyuGram.zip' -Force"
+          ls -la "$ARTIFACT"
 
       - uses: actions/upload-artifact@v7
         name: Upload artifact.
@@ -288,4 +298,4 @@ jobs:
             artifact/AyuGram.exe
             artifact/Updater.exe
             artifact/AyuGram.zip
-            artifact/tx64upd*
+            artifact/td-update-*
