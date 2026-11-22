@@ -269,9 +269,9 @@ jobs:
           [ -f "$OUT/Updater.exe" ] && cp -f "$OUT/Updater.exe" "$ARTIFACT/"
           if [ -f "$OUT/Packer.exe" ] && [ -n "$AYUGRAM_V2_RELEASE_KEY" ]; then
             printf '%s\n' "$AYUGRAM_V2_RELEASE_KEY" > "$ARTIFACT/release-private.pem"
-            cp -f "$GITHUB_WORKSPACE/Telegram/Resources/update/manifest.min.json" "$ARTIFACT/manifest.min.json"
-            cp -f "$GITHUB_WORKSPACE/Telegram/Resources/update/manifest.sig" "$ARTIFACT/manifest.sig"
-            cp -f "$GITHUB_WORKSPACE/Telegram/Resources/update/root-public.pem" "$ARTIFACT/root-public.pem"
+            cp -f "$TBUILD/$REPO_NAME/Telegram/Resources/update/manifest.min.json" "$ARTIFACT/manifest.min.json"
+            cp -f "$TBUILD/$REPO_NAME/Telegram/Resources/update/manifest.sig" "$ARTIFACT/manifest.sig"
+            cp -f "$TBUILD/$REPO_NAME/Telegram/Resources/update/root-public.pem" "$ARTIFACT/root-public.pem"
             cd "$OUT"
             "./Packer.exe" -path AyuGram.exe -path Updater.exe -target win64 -version 7004005 \
               -channel stable -keys-loc "$ARTIFACT" \
