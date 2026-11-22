@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(_MSC_VER) && !defined(_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING)
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+#endif
+
 #if defined(_MSC_VER)
 __pragma(push_macro("min"))
 #undef min
