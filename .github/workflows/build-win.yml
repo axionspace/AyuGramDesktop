@@ -277,7 +277,9 @@ jobs:
               -channel stable -keys-loc "$ARTIFACT" \
               -local-key "$ARTIFACT/release-private.pem" -local-key-id ayu-stable-2026
             cp -f td-update-* "$ARTIFACT/" 2>/dev/null || true
-            rm -f "$ARTIFACT/release-private.pem"
+            rm -f "$ARTIFACT/release-private.pem" \
+              "$ARTIFACT/manifest.min.json" "$ARTIFACT/manifest.sig" \
+              "$ARTIFACT/root-public.pem"
           fi
           cd "$GITHUB_WORKSPACE"
           powershell -Command "Compress-Archive -Path '$ARTIFACT/AyuGram.exe', '$ARTIFACT/Updater.exe' -DestinationPath '$ARTIFACT/AyuGram.zip' -Force"
