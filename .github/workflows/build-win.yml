@@ -282,7 +282,6 @@ jobs:
               "$ARTIFACT/root-public.pem"
           fi
           cd "$GITHUB_WORKSPACE"
-          powershell -Command "Compress-Archive -Path '$ARTIFACT/AyuGram.exe', '$ARTIFACT/Updater.exe' -DestinationPath '$ARTIFACT/AyuGram.zip' -Force"
           ls -la "$ARTIFACT"
 
       - uses: actions/upload-artifact@v7
@@ -299,5 +298,4 @@ jobs:
           files: |
             artifact/AyuGram.exe
             artifact/Updater.exe
-            artifact/AyuGram.zip
             artifact/td-update-*
